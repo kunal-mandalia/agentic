@@ -6,6 +6,23 @@
 pip install smolagents
 ```
 
+### For Local Models (Recommended)
+To run completely offline with local models:
+
+```bash
+# Option 1: Ollama (easiest)
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull llama3.2:3b
+
+# Option 2: llama.cpp
+pip install llama-cpp-python
+
+# Option 3: Transformers
+pip install transformers torch
+```
+
+See [local-models.md](local-models.md) for detailed setup instructions.
+
 ## Basic Concepts
 
 ### Agent
@@ -26,6 +43,7 @@ Functions that agents can call to perform specific tasks. Tools have:
 
 ## Minimal Example
 
+### With Cloud Models
 ```python
 from smolagents import CodeAgent, tool
 
@@ -40,6 +58,46 @@ def calculator(expression: str) -> str:
 
 # Create agent with tool
 agent = CodeAgent(tools=[calculator])
+
+# Use the agent
+result = agent.run("What is 15 * 7?")
+print(result)
+```
+
+### With Local Models (Ollama)
+```python
+from smolagents import CodeAgent, tool
+import requests
+
+@tool
+def calculator(expression: str) -> str:
+    """Evaluate a mathematical expression"""
+    try:
+        result = eval(expression)
+        return f"Result: {result}"
+    except Exception as e:
+        return f"Error: {e}"
+
+# Custom LLM class for Ollama
+class OllamaLLM:
+    def __init__(self, model="llama3.2:3b"):
+        self.model = model
+        self.base_url = "http://localhost:11434"
+
+    def generate(self, prompt, **kwargs):
+        response = requests.post(
+            f"{self.base_url}/api/generate",
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False
+            }
+        )
+        return response.json()["response"]
+
+# Create agent with local model
+llm = OllamaLLM()
+agent = CodeAgent(tools=[calculator], llm=llm)
 
 # Use the agent
 result = agent.run("What is 15 * 7?")
