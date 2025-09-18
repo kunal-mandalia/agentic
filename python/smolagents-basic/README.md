@@ -46,6 +46,9 @@ For production use, stick with models 3B+ parameters or well-trained instruction
 # Install dependencies
 uv add smolagents flask litellm python-dotenv torch transformers accelerate
 
+# For Gmail tools (optional)
+uv add google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+
 # Add OpenAI API key to .env
 echo "OPENAI_API_KEY=your-key-here" > .env
 
@@ -57,6 +60,10 @@ uv run python server.py
 # Test: curl -X POST http://localhost:5000/run -H 'Content-Type: application/json' -d '{"task": "tell me a joke"}'
 ```
 
+### Gmail Setup
+
+For Gmail tools, see [GMAIL_SETUP.md](./GMAIL_SETUP.md) for detailed configuration instructions.
+
 ## Tools
 
 ### Math Tools (`tools/math/`)
@@ -64,6 +71,12 @@ uv run python server.py
 
 ### Entertainment Tools (`tools/entertainment/`)
 - `tell_joke()` - Returns a random joke
+
+### Email Tools (`tools/email/`) - Planned
+- `search_gmail(query)` - Search Gmail messages
+- `read_email(message_id)` - Read specific email content
+- `get_recent_emails(count)` - Get recent emails
+- `count_unread()` - Count unread messages
 
 ### Adding New Tools
 
