@@ -9,10 +9,21 @@ This project demonstrates using a lightweight model (GPT-5-nano) as an orchestra
 - **Fast** - No heavy model loading for basic decisions
 - **Scalable** - Add tools incrementally for specific use cases
 
-## Files
+## Project Structure
 
-- `main.py` - Script version (loads model each run)
-- `server.py` - Server version (loads model once, handles multiple requests)
+```
+smolagents-basic/
+├── tools/                    # Organized tool modules
+│   ├── math/                # Mathematical operations
+│   │   └── calculator.py    # Addition tool
+│   └── entertainment/       # Fun/utility tools
+│       └── jokes.py        # Joke generation
+├── agents/                  # Agent configurations
+│   └── basic_agent.py      # Main agent factory
+├── main.py                 # Script version (loads model each run)
+├── server.py               # Server version (loads model once)
+└── README.md               # This file
+```
 
 ## Model Requirements
 
@@ -48,8 +59,26 @@ uv run python server.py
 
 ## Tools
 
-Current tools:
-- `calculator(a, b)` - Add two numbers
+### Math Tools (`tools/math/`)
+- `calculator(a, b)` - Add two numbers together
+
+### Entertainment Tools (`tools/entertainment/`)
 - `tell_joke()` - Returns a random joke
 
-Extend by adding more `@tool` decorated functions for your specific use case.
+### Adding New Tools
+
+1. Create a new module in the appropriate `tools/` subdirectory
+2. Use the `@tool` decorator on your functions
+3. Add imports to the relevant `__init__.py` files
+4. Update your agent configuration in `agents/basic_agent.py`
+
+Example:
+```python
+# tools/math/advanced.py
+from smolagents import tool
+
+@tool
+def multiply(a: float, b: float) -> float:
+    """Multiply two numbers."""
+    return a * b
+```
