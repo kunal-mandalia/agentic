@@ -11,7 +11,7 @@ print(f"Model loaded in {load_time:.2f} seconds")
 # Track processing time
 print("Processing task...")
 start_time = time.time()
-result = agent.run("tell me a joke")
+result = agent.run("Check my unread emails and give me the exact count number and whether I have any unread emails as true/false")
 processing_time = time.time() - start_time
 
 print(f"Result: {result}")

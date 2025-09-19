@@ -62,7 +62,13 @@ uv run python server.py
 
 ### Gmail Setup
 
-For Gmail tools, see [GMAIL_SETUP.md](./GMAIL_SETUP.md) for detailed configuration instructions.
+For Gmail tools, see [GMAIL_SETUP.md](./GMAIL_SETUP.md) for detailed OAuth 2.0 configuration and structured data examples.
+
+**Quick setup:**
+1. Create OAuth 2.0 credentials in Google Cloud Console
+2. Add your email as test user
+3. Download credentials and update path in `tools/email/gmail.py`
+4. First run will open browser for authentication
 
 ## Tools
 
@@ -72,11 +78,17 @@ For Gmail tools, see [GMAIL_SETUP.md](./GMAIL_SETUP.md) for detailed configurati
 ### Entertainment Tools (`tools/entertainment/`)
 - `tell_joke()` - Returns a random joke
 
-### Email Tools (`tools/email/`) - Planned
-- `search_gmail(query)` - Search Gmail messages
-- `read_email(message_id)` - Read specific email content
-- `get_recent_emails(count)` - Get recent emails
-- `count_unread()` - Count unread messages
+### Email Tools (`tools/email/`) ✅ **Implemented with Structured Data**
+- `search_gmail(query, max_results)` - Search Gmail messages → Returns structured dict with messages array
+- `read_gmail_message(message_id)` - Read specific email content → Returns structured email object
+- `get_recent_gmail(count)` - Get recent emails → Returns structured messages list
+- `count_unread_gmail()` - Count unread messages → Returns `{unread_count, message, has_unread}`
+
+**Structured Data Benefits:**
+- 🎯 **Type-safe access** - Agent can access `.unread_count`, `.has_unread`, `.subject` directly
+- 🚫 **No string parsing** - Agent works with clean data structures instead of formatted text
+- 🔧 **Self-correcting** - Agent learns to handle structured responses automatically
+- 🏗️ **Composable** - Build complex queries using individual message attributes
 
 ### Adding New Tools
 
@@ -95,3 +107,22 @@ def multiply(a: float, b: float) -> float:
     """Multiply two numbers."""
     return a * b
 ```
+
+## Example Agent Interactions
+
+**With structured Gmail data:**
+```bash
+# Agent gets structured response and accesses specific fields
+agent.run("How many unread emails do I have? Also tell me if I have any.")
+# Returns: {'count': 100, 'has_unread': True}
+
+# Agent works with message attributes directly
+agent.run("Search for emails from john@example.com and show me the subjects")
+# Agent accesses: [msg['subject'] for msg in search_results['messages']]
+```
+
+**Performance comparison:**
+- **Script version**: 24.49s total (1.37s model load + 23.11s processing)
+- **Server version**: ~2s after initial load (saves ~22s per request)
+
+The local model orchestrator (GPT-5-nano) efficiently routes to powerful Gmail tools while keeping costs minimal!

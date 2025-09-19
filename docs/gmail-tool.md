@@ -1,6 +1,6 @@
 # Gmail Tools Setup Guide
 
-This guide explains how to set up Gmail tools for smolagents to read and search your Gmail account.
+This guide explains how to set up Gmail tools for smolagents to read and search your Gmail account with structured data responses.
 
 ## Prerequisites
 
@@ -19,231 +19,180 @@ This guide explains how to set up Gmail tools for smolagents to read and search 
    - Search for "Gmail API"
    - Click "Enable"
 
-### 2. Create Service Account (Recommended for Server)
+### 2. OAuth 2.0 Setup (Recommended for Personal Gmail)
 
-1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "Service Account"
-3. Fill in service account details
-4. Download the JSON key file
-5. Save as `gmail-service-account.json` in your project root
-
-### 3. OAuth Setup (For Personal Use)
-
-1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "OAuth 2.0 Client ID"
-3. Choose "Desktop application"
-4. Download `credentials.json`
-5. Save in your project root
+1. Go to "APIs & Services" > "OAuth consent screen"
+2. Configure consent screen:
+   - **User Type**: Choose "External" (unless you have Google Workspace)
+   - Fill in required fields (App name, User support email, Developer contact)
+   - **Scopes**: Add `https://www.googleapis.com/auth/gmail.readonly`
+   - **Test users**: Add your Gmail address to test users list
+3. Go to "APIs & Services" > "Credentials"
+4. Click "Create Credentials" > "OAuth 2.0 Client ID"
+5. Choose "Desktop application"
+6. Download the credentials file
+7. Save as your desired location (default: `../../../agentic/secrets/gcloud_desktop_credentials.json`)
 
 ## Environment Setup
 
-Add to your `.env` file:
-
-```bash
-# Gmail API Configuration
-GMAIL_CREDENTIALS_PATH=./credentials.json
-GMAIL_SERVICE_ACCOUNT_PATH=./gmail-service-account.json
-GMAIL_SCOPES=https://www.googleapis.com/auth/gmail.readonly
-
-# For domain-wide delegation (G Suite/Workspace)
-GMAIL_DELEGATED_USER=your-email@domain.com
+Update the credentials path in your Gmail tools if needed:
+```python
+# In tools/email/gmail.py, update the path to your credentials
+credentials_path = '../../../agentic/secrets/gcloud_desktop_credentials.json'
 ```
 
 ## Installation
 
-Add required dependencies:
+Gmail dependencies are already included if you followed the main setup:
 
 ```bash
 uv add google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
 ```
 
-## Gmail Tools Implementation
+## Gmail Tools - Structured Data Implementation
 
-### Basic Gmail Search Tool
+### Available Tools with Structured Responses
+
+#### 1. `search_gmail(query, max_results=10)`
+
+**Returns structured dictionary:**
+```python
+{
+  "query": "from:example@gmail.com",
+  "total_found": 5,
+  "messages": [
+    {
+      "id": "msg_123456",
+      "subject": "Meeting Tomorrow",
+      "sender": "boss@company.com",
+      "date": "Mon, 18 Sep 2025 10:30:00 -0700",
+      "snippet": "Don't forget our meeting at 2pm...",
+      "body": "",
+      "is_unread": true
+    }
+    // ... more messages
+  ]
+}
+```
+
+**Example queries:**
+- `search_gmail("is:unread")` - Find unread emails
+- `search_gmail("from:john@example.com")` - Emails from specific sender
+- `search_gmail("subject:invoice")` - Emails with "invoice" in subject
+- `search_gmail("newer_than:7d")` - Emails from last 7 days
+
+#### 2. `count_unread_gmail()`
+
+**Returns structured dictionary:**
+```python
+{
+  "unread_count": 100,
+  "message": "You have 100 unread messages.",
+  "has_unread": true
+}
+```
+
+#### 3. `read_gmail_message(message_id)`
+
+**Returns structured dictionary:**
+```python
+{
+  "id": "msg_123456",
+  "subject": "Meeting Tomorrow",
+  "sender": "boss@company.com",
+  "date": "Mon, 18 Sep 2025 10:30:00 -0700",
+  "snippet": "Don't forget our meeting...",
+  "body": "Full email body content here...",
+  "is_unread": true
+}
+```
+
+#### 4. `get_recent_gmail(count=5)`
+
+**Returns structured dictionary:**
+```python
+{
+  "query": "recent",
+  "total_found": 5,
+  "messages": [
+    // Array of EmailMessage objects (same structure as search_gmail)
+  ]
+}
+```
+
+### Benefits of Structured Data
+
+✅ **Type-safe access** - Agent can access specific attributes like `.unread_count`, `.has_unread`
+✅ **No string parsing** - Direct access to data fields
+✅ **Better error handling** - Structured error responses
+✅ **Composable queries** - Agent can build complex logic using individual fields
+✅ **Self-correcting** - Agent learns to handle structured data automatically
+
+### Usage Examples in Agent
 
 ```python
-# tools/email/gmail.py
-from smolagents import tool
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-import pickle
-import os
+# The agent can now work with structured data intelligently:
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+# Simple count with boolean logic
+result = agent.run("Do I have unread emails? Give me exact count and true/false.")
+# Agent accesses: result['unread_count'] and result['has_unread']
 
-def get_gmail_service():
-    """Authenticate and return Gmail service object."""
-    creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
+# Complex search with attribute access
+result = agent.run("Find emails from last week and tell me who sent the most recent one")
+# Agent accesses: messages[0]['sender'], messages[0]['date']
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
-
-    return build('gmail', 'v1', credentials=creds)
-
-@tool
-def search_gmail(query: str, max_results: int = 10) -> str:
-    """
-    Search Gmail messages with a query.
-
-    Args:
-        query: Gmail search query (e.g., "from:example@gmail.com", "is:unread")
-        max_results: Maximum number of results to return
-
-    Returns:
-        Formatted string with search results
-    """
-    try:
-        service = get_gmail_service()
-        results = service.users().messages().list(
-            userId='me', q=query, maxResults=max_results
-        ).execute()
-
-        messages = results.get('messages', [])
-        if not messages:
-            return f"No messages found for query: {query}"
-
-        output = f"Found {len(messages)} messages for '{query}':\n\n"
-
-        for msg in messages:
-            msg_detail = service.users().messages().get(
-                userId='me', id=msg['id']
-            ).execute()
-
-            headers = msg_detail['payload'].get('headers', [])
-            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-            date = next((h['value'] for h in headers if h['name'] == 'Date'), 'No Date')
-
-            output += f"• {subject}\n"
-            output += f"  From: {sender}\n"
-            output += f"  Date: {date}\n"
-            output += f"  ID: {msg['id']}\n\n"
-
-        return output
-
-    except Exception as e:
-        return f"Error searching Gmail: {str(e)}"
-
-@tool
-def count_unread_gmail() -> str:
-    """
-    Count unread messages in Gmail.
-
-    Returns:
-        Number of unread messages
-    """
-    try:
-        service = get_gmail_service()
-        results = service.users().messages().list(
-            userId='me', q='is:unread'
-        ).execute()
-
-        messages = results.get('messages', [])
-        count = len(messages)
-
-        return f"You have {count} unread messages."
-
-    except Exception as e:
-        return f"Error counting unread messages: {str(e)}"
-
-@tool
-def read_gmail_message(message_id: str) -> str:
-    """
-    Read a specific Gmail message by ID.
-
-    Args:
-        message_id: Gmail message ID
-
-    Returns:
-        Message content and metadata
-    """
-    try:
-        service = get_gmail_service()
-        message = service.users().messages().get(
-            userId='me', id=message_id
-        ).execute()
-
-        headers = message['payload'].get('headers', [])
-        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-        sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
-        date = next((h['value'] for h in headers if h['name'] == 'Date'), 'No Date')
-
-        # Get message body
-        body = ""
-        if 'parts' in message['payload']:
-            for part in message['payload']['parts']:
-                if part['mimeType'] == 'text/plain':
-                    data = part['body']['data']
-                    body = base64.urlsafe_b64decode(data).decode('utf-8')
-                    break
-        else:
-            if message['payload']['body'].get('data'):
-                body = base64.urlsafe_b64decode(
-                    message['payload']['body']['data']
-                ).decode('utf-8')
-
-        output = f"Subject: {subject}\n"
-        output += f"From: {sender}\n"
-        output += f"Date: {date}\n\n"
-        output += f"Body:\n{body[:1000]}..."  # Truncate long messages
-
-        return output
-
-    except Exception as e:
-        return f"Error reading message: {str(e)}"
+# Structured filtering
+result = agent.run("Search for unread emails and show me only the subjects")
+# Agent accesses: [msg['subject'] for msg in messages if msg['is_unread']]
 ```
+
+## First-Time Authentication
+
+1. Run your smolagents application
+2. When prompted, a browser window will open for Google OAuth
+3. Sign in with your Google account
+4. Grant permissions to access Gmail (read-only)
+5. Authentication token will be saved automatically for future use
 
 ## Security Considerations
 
-1. **Never commit credentials** - Add `credentials.json`, `token.pickle`, and `gmail-service-account.json` to `.gitignore`
-2. **Use least privilege** - Only request necessary Gmail scopes
-3. **Rotate credentials** regularly for production use
-4. **Consider service accounts** for server deployments
-
-## Usage Examples
-
-```python
-# In your agent code
-from tools.email.gmail import search_gmail, count_unread_gmail, read_gmail_message
-
-# Add to your agent
-agent = CodeAgent(tools=[
-    calculator,
-    tell_joke,
-    search_gmail,
-    count_unread_gmail,
-    read_gmail_message
-], model=model)
-
-# Example queries:
-# - "Search my emails from john@example.com"
-# - "How many unread emails do I have?"
-# - "Find emails with subject containing 'invoice'"
-```
+1. **Credentials are in `.gitignore`** - Never commit credential files
+2. **Read-only access** - Tools only request Gmail read permissions
+3. **Token caching** - Authentication token cached locally in `token.pickle`
+4. **Secure paths** - Credentials stored outside project directory
 
 ## Troubleshooting
 
-- **Authentication errors**: Ensure credentials.json is valid and in project root
-- **Scope errors**: Make sure you're using the correct Gmail API scopes
-- **Rate limits**: Gmail API has quotas - implement backoff for production use
-- **Large mailboxes**: Consider pagination for accounts with many emails
+### "Client secrets must be for a web or installed app"
+- You're using service account credentials instead of OAuth 2.0
+- Download OAuth 2.0 credentials for "Desktop application"
 
-## Next Steps
+### "App is in testing mode"
+- Add your email to "Test users" in OAuth consent screen
+- Or publish your app (not recommended for personal use)
 
-1. Implement the Gmail tools in your `tools/email/` directory
-2. Update `tools/__init__.py` to include email tools
-3. Add Gmail tools to your agent configuration
-4. Test with simple queries before complex searches
+### "Authentication failed"
+- Delete `token.pickle` and re-authenticate
+- Check that Gmail API is enabled in Google Cloud Console
+
+### "Credentials not found"
+- Verify the credentials file path in `tools/email/gmail.py`
+- Ensure file exists at specified location
+
+## Example Agent Interactions
+
+```bash
+# Count unread emails
+agent.run("How many unread emails do I have?")
+# Returns: "You have 100 unread messages."
+
+# Search with structured response
+agent.run("Find emails from john@example.com from last week")
+# Agent gets structured data and can access sender, date, subject individually
+
+# Complex query with data manipulation
+agent.run("Search unread emails and tell me the top 3 senders")
+# Agent processes structured message list and counts by sender
+```
+
+The Gmail tools now provide rich, structured data that enables more intelligent agent interactions and reliable email processing.
